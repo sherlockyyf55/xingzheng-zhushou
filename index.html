@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行政文案风格转换器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+            min-height: 100vh;
+        }
+
+        /* 顶部标题栏 */
+        .header {
+            background-color: #1e40af;
+            color: white;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .header .badge {
+            background-color: rgba(255,255,255,0.2);
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 13px;
+        }
+
+        /* 主容器 */
+        .container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+            gap: 24px;
+            min-height: calc(100vh - 70px);
+        }
+
+        /* 卡片样式 */
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 20px;
+            flex: 1;
+        }
+
+        /* 左侧输入区 */
+        .input-section {
+            flex: 0 0 40%;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .input-section h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .input-box {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .input-box textarea {
+            flex: 1;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 14px;
+            font-size: 14px;
+            resize: none;
+            line-height: 1.6;
+            min-height: 180px;
+        }
+
+        .input-box textarea:focus {
+            outline: none;
+            border-color: #1e40af;
+            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+        }
+
+        .select-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .select-group {
+            flex: 1;
+        }
+
+        .select-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: #4b5563;
+        }
+
+        .select-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            background-color: white;
+            cursor: pointer;
+        }
+
+        .select-group select:focus {
+            outline: none;
+            border-color: #1e40af;
+        }
+
+        .btn-primary {
+            background-color: #1e40af;
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            background-color: #1e3a8a;
+        }
+
+        .btn-primary:active {
+            background-color: #172554;
+        }
+
+        /* 右侧输出区 */
+        .output-section {
+            flex: 0 0 60%;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .output-section h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .output-box {
+            flex: 1;
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 24px;
+            min-height: 300px;
+            overflow-y: auto;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .output-content {
+            line-height: 1.8;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .output-placeholder {
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-copy {
+            background-color: #6b7280;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn-copy:hover {
+            background-color: #4b5563;
+        }
+
+        .btn-copy.copied {
+            background-color: #059669;
+        }
+
+        .btn-secondary {
+            background-color: #f3f4f6;
+            color: #4b5563;
+            border: 1px solid #d1d5db;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background-color: #e5e7eb;
+            border-color: #9ca3af;
+        }
+
+        .copy-toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background-color: #059669;
+            color: white;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-size: 14px;
+            opacity: 0;
+            transition: all 0.3s;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .copy-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* 响应式 */
+        @media (max-width: 900px) {
+            .container {
+                flex-direction: column;
+                padding: 16px;
+            }
+
+            .input-section,
+            .output-section {
+                flex: none;
+                width: 100%;
+            }
+
+            .input-section {
+                min-height: auto;
+            }
+
+            .output-box {
+                min-height: 250px;
+            }
+
+            .select-row {
+                flex-direction: column;
+            }
+
+            .btn-group {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>行政文案风格转换器</h1>
+        <span class="badge">浦银行政小助手</span>
+    </header>
+
+    <div class="container">
+        <section class="input-section">
+            <div class="card">
+                <h2>输入设置</h2>
+                <div class="select-row">
+                    <div class="select-group">
+                        <label for="scene">输出场景</label>
+                        <select id="scene">
+                            <option value="notice">行政通知</option>
+                            <option value="email">邮件汇报</option>
+                            <option value="wechat">微信群发</option>
+                            <option value="briefing">领导简报</option>
+                        </select>
+                    </div>
+                    <div class="select-group">
+                        <label for="tone">语气风格</label>
+                        <select id="tone">
+                            <option value="formal">正式严谨</option>
+                            <option value="friendly">亲切服务</option>
+                            <option value="concise">简洁干练</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="input-box">
+                    <textarea id="inputText" placeholder="粘贴原始素材，如满意度调研反馈、会议纪要、问题清单..."></textarea>
+                </div>
+                <button class="btn-primary" onclick="generateText()">生成文案</button>
+            </div>
+        </section>
+
+        <section class="output-section">
+            <div class="card">
+                <h2>生成结果</h2>
+                <div class="output-box">
+                    <div id="outputContent" class="output-content">
+                        <span class="output-placeholder">生成的文案将在此显示...</span>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn-secondary" onclick="generateText()">重新生成</button>
+                    <button class="btn-copy" id="copyBtn" onclick="copyText()">一键复制</button>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div class="copy-toast" id="toast">已复制</div>
+
+    <script>
+        const toneWords = {
+            formal: {
+                openers: ['请', '务必', '严格执行', '根据', '按照', '依据'],
+                closers: ['严格执行', '请遵照执行', '务必落实', '请及时处理'],
+                connectors: ['因此', '据此', '为此', '现将', '经研究决定']
+            },
+            friendly: {
+                openers: ['为了更好地', '为了让', '烦请', '感谢', '期待'],
+                closers: ['感谢理解与配合', '祝工作顺利', '期待您的支持', '如有疑问请联系'],
+                connectors: ['同时', '另外', '此外', '同时提醒']
+            },
+            concise: {
+                openers: ['现', '即', '通知', '本次'],
+                closers: ['执行', '落实', '办理', '处理'],
+                connectors: ['并', '且', '以及']
+            }
+        };
+
+        function generateText() {
+            const inputText = document.getElementById('inputText').value.trim();
+            const scene = document.getElementById('scene').value;
+            const tone = document.getElementById('tone').value;
+
+            if (!inputText) {
+                alert('请输入原始素材');
+                return;
+            }
+
+            const keywords = extractKeywords(inputText);
+            let output = '';
+
+            switch (scene) {
+                case 'notice':
+                    output = generateNotice(inputText, keywords, tone);
+                    break;
+                case 'email':
+                    output = generateEmail(inputText, keywords, tone);
+                    break;
+                case 'wechat':
+                    output = generateWechat(inputText, keywords, tone);
+                    break;
+                case 'briefing':
+                    output = generateBriefing(inputText, keywords, tone);
+                    break;
+            }
+
+            document.getElementById('outputContent').innerHTML = output;
+            document.getElementById('copyBtn').classList.remove('copied');
+            document.getElementById('copyBtn').textContent = '一键复制';
+        }
+
+        function extractKeywords(text) {
+            const cleaned = text.replace(/[\s\n\r]+/g, '').slice(0, 20);
+            return cleaned || '事项';
+        }
+
+        function generateNotice(text, keywords, tone) {
+            const words = toneWords[tone];
+            const title = `【通知】关于${keywords}的安排`;
+            
+            const paragraphs = text.split(/[。！？\n]+/).filter(p => p.trim());
+            const mainContent = paragraphs.map((p, i) => `　　${i + 1}. ${p.trim()}。`).join('\n');
+
+            const opener = getRandomItem(words.openers);
+            const closer = getRandomItem(words.closers);
+
+            return `${title}
+
+${opener}，现将有关事项通知如下：
+
+${mainContent}
+
+${closer}。如有疑问，请联系综合管理部。
+
+综合管理部
+${getCurrentDate()}`;
+        }
+
+        function generateEmail(text, keywords, tone) {
+            const words = toneWords[tone];
+            const paragraphs = text.split(/[。！？\n]+/).filter(p => p.trim());
+            
+            const greeting = tone === 'formal' ? '各位领导、同事：' : '各位同事：';
+            const subject = `【工作汇报】${keywords}`;
+
+            let mainContent = '';
+            if (paragraphs.length > 0) {
+                mainContent = paragraphs.map(p => `　　${p.trim()}。`).join('\n');
+            }
+
+            const opener = getRandomItem(words.openers);
+            const closer = getRandomItem(words.closers);
+
+            return `主题：${subject}
+
+${greeting}
+
+　　${opener}，现将${keywords}相关情况汇报如下：
+
+${mainContent}
+
+　　${closer}，望各位领导和同事给予支持与指导。
+
+此致
+
+祝工作顺利！
+
+综合管理部
+${getCurrentDate()}`;
+        }
+
+        function generateWechat(text, keywords, tone) {
+            const words = toneWords[tone];
+            const paragraphs = text.split(/[。！？\n]+/).filter(p => p.trim());
+            
+            let emoji = '📢';
+            if (keywords.includes('满意') || keywords.includes('调研')) emoji = '📊';
+            if (keywords.includes('问题')) emoji = '⚠️';
+            if (keywords.includes('会议')) emoji = '📅';
+            if (keywords.includes('通知')) emoji = '📌';
+            
+            const lines = paragraphs.map((p, i) => {
+                const prefix = tone === 'concise' ? '✅' : '💡';
+                return `${prefix} ${p.trim()}`;
+            });
+
+            const opener = tone === 'friendly' ? '各位小伙伴～' : '各位同事：';
+
+            return `${emoji} ${keywords}
+
+${opener}
+
+${lines.join('\n')}
+
+${tone === 'friendly' ? '� 感谢配合！' : ''}`;
+        }
+
+        function generateBriefing(text, keywords, tone) {
+            const words = toneWords[tone];
+            const paragraphs = text.split(/[。！？\n]+/).filter(p => p.trim());
+            
+            const coreConclusion = paragraphs[0] ? truncateText(paragraphs[0].trim(), 3) : `关于${keywords}的情况说明`;
+            const measures = paragraphs.slice(1, 4).map(p => truncateText(p.trim(), 1));
+            const coordinations = paragraphs.length > 4 
+                ? paragraphs.slice(4).map(p => truncateText(p.trim(), 1)).join('\n')
+                : '• 暂无需协调事项';
+
+            const connector = getRandomItem(words.connectors);
+
+            return `【核心结论】
+${coreConclusion}
+
+【具体举措】
+${measures.join('\n')}
+
+【需协调事项】
+${coordinations}`;
+        }
+
+        function truncateText(text, maxLines) {
+            if (text.length <= 40) return `• ${text}`;
+            const truncated = text.slice(0, 40) + '...';
+            return `• ${truncated}`;
+        }
+
+        function getRandomItem(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        function getCurrentDate() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            return `${year}年${month}月${day}日`;
+        }
+
+        function copyText() {
+            const outputContent = document.getElementById('outputContent');
+            const text = outputContent.innerText;
+
+            if (!text || outputContent.querySelector('.output-placeholder')) {
+                alert('没有可复制的内容');
+                return;
+            }
+
+            navigator.clipboard.writeText(text).then(() => {
+                const toast = document.getElementById('toast');
+                const btn = document.getElementById('copyBtn');
+                
+                toast.classList.add('show');
+                btn.classList.add('copied');
+                btn.textContent = '已复制';
+
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 2000);
+
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.textContent = '一键复制';
+                }, 3000);
+            }).catch(() => {
+                alert('复制失败，请手动选择文本复制');
+            });
+        }
+    </script>
+</body>
+</html>
