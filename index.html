@@ -92,8 +92,8 @@
 
         .input-box textarea:focus {
             outline: none;
-            border-color: #1e40af;
-            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+            border-color: #8B0000;
+            box-shadow: 0 0 0 3px rgba(139, 0, 0, 0.1);
         }
 
         .select-row {
@@ -125,7 +125,55 @@
 
         .select-group select:focus {
             outline: none;
-            border-color: #1e40af;
+            border-color: #8B0000;
+        }
+
+        /* 智能提取预览区域 */
+        .extract-preview {
+            background-color: #f3f4f6;
+            border: 1px dashed #d1d5db;
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 12px;
+            color: #6b7280;
+            line-height: 1.8;
+            min-height: 40px;
+        }
+
+        .extract-preview .preview-title {
+            font-weight: 600;
+            color: #4b5563;
+            margin-bottom: 6px;
+        }
+
+        .extract-preview .field-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 8px;
+        }
+
+        .extract-preview .field-tag {
+            display: inline-block;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 11px;
+        }
+
+        .extract-preview .field-tag .label {
+            color: #9ca3af;
+            margin-right: 4px;
+        }
+
+        .extract-preview .field-tag .value {
+            color: #374151;
+            font-weight: 500;
+        }
+
+        .extract-preview .empty-hint {
+            color: #9ca3af;
+            font-style: italic;
         }
 
         .btn-primary {
@@ -179,6 +227,56 @@
             font-size: 14px;
             white-space: pre-wrap;
             word-wrap: break-word;
+        }
+
+        .output-content .notice-title {
+            font-size: 18px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        .output-content .email-subject {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #374151;
+        }
+
+        .output-content .email-header {
+            color: #6b7280;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+
+        .output-content .bold-text {
+            font-weight: 700;
+        }
+
+        .output-content .briefing-conclusion {
+            font-size: 15px;
+            font-weight: 700;
+            color: #1f2937;
+            padding: 8px 0;
+        }
+
+        .output-content .data-row {
+            background: #fff7ed;
+            border-left: 3px solid #f59e0b;
+            padding: 6px 10px;
+            margin: 6px 0;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .output-content .priority-high {
+            color: #dc2626;
+        }
+
+        .output-content .priority-mid {
+            color: #d97706;
+        }
+
+        .output-content .priority-low {
+            color: #059669;
         }
 
         .output-placeholder {
@@ -310,6 +408,10 @@
                 <div class="input-box">
                     <textarea id="inputText" placeholder="粘贴原始素材，如满意度调研反馈、会议纪要、问题清单..."></textarea>
                 </div>
+                <div class="extract-preview" id="extractPreview">
+                    <div class="preview-title">智能提取预览</div>
+                    <div class="empty-hint">点击生成文案后，这里将显示AI提取的关键信息</div>
+                </div>
                 <button class="btn-primary" onclick="generateText()">生成文案</button>
             </div>
         </section>
@@ -330,52 +432,541 @@
         </section>
     </div>
 
-    <div class="copy-toast" id="toast">已复制</div>
+    <div class="copy-toast" id="toast">已复制到剪贴板</div>
 
     <script>
+        /* ========== 语气风格词库 ========== */
         const toneWords = {
             formal: {
-                openers: ['请', '务必', '严格执行', '根据', '按照', '依据'],
-                closers: ['严格执行', '请遵照执行', '务必落实', '请及时处理'],
-                connectors: ['因此', '据此', '为此', '现将', '经研究决定']
+                openers: ['根据', '按照', '依据', '经研究', '结合'],
+                closers: ['请遵照执行', '务必落实', '请及时处理', '特此通知'],
+                connectors: ['因此', '据此', '为此', '现将'],
+                prefix: '一、二、三、四、五'.split('、')
             },
             friendly: {
-                openers: ['为了更好地', '为了让', '烦请', '感谢', '期待'],
-                closers: ['感谢理解与配合', '祝工作顺利', '期待您的支持', '如有疑问请联系'],
-                connectors: ['同时', '另外', '此外', '同时提醒']
+                openers: ['为了更好地', '为了让', '结合大家', '综合考虑'],
+                closers: ['感谢理解与配合', '祝工作顺利', '期待您的支持'],
+                connectors: ['同时', '另外', '此外', '同时提醒'],
+                prefix: '1.2.3.4.5'.split('.').filter(x => x)
             },
             concise: {
-                openers: ['现', '即', '通知', '本次'],
-                closers: ['执行', '落实', '办理', '处理'],
-                connectors: ['并', '且', '以及']
+                openers: ['现', '根据', '按要求'],
+                closers: ['执行', '落实', '办理'],
+                connectors: ['并', '且', '以及'],
+                prefix: '①②③④⑤'.split('')
             }
         };
 
+        /* ========== 智能提取核心函数 ========== */
+        function extractKeyInfo(text) {
+            const info = {
+                time: [],      // 时间词
+                location: [],  // 地点/区域
+                number: [],    // 数量
+                problem: [],   // 问题/现象
+                action: [],    // 措施/动作
+                people: []     // 人员/部门
+            };
+
+            if (!text) return info;
+
+            /* --- 1. 提取时间词 --- */
+            const timePatterns = [
+                /\d{1,2}月\d{1,2}日[前后内左右]?/g,
+                /\d{1,2}月[中下上旬底前]+/g,
+                /本周[中下上旬末]?/g,
+                /下周[中下上旬末]?/g,
+                /今明[两天日]/g,
+                /[今明后]天/g,
+                /今年[下上半]?/g,
+                /明年/g,
+                /\d{4}年/g,
+                /[第][一二三四五六七八九十]+季度/g,
+                /春节|国庆|元旦|中秋|端午|清明|五一|劳动节|国庆节/g,
+                /黄梅雨季|梅雨季节|雨季|汛期/g,
+                /[早中晚]上?/g,
+                /[前后内左右上下][半一]?[周天期小时月日]?/g,
+                /\d{1,2}[点时]/g,
+                /\d{1,2}:\d{2}/g
+            ];
+            timePatterns.forEach(pat => {
+                const matches = text.match(pat);
+                if (matches) {
+                    matches.forEach(m => {
+                        if (m.length >= 2 && !info.time.includes(m)) info.time.push(m);
+                    });
+                }
+            });
+
+            /* --- 2. 提取地点/区域 --- */
+            const locationKeywords = [
+                '一楼', '二楼', '三楼', '四楼', '五楼', '六楼', '七楼', '八楼', '九楼', '十楼',
+                '1楼', '2楼', '3楼', '4楼', '5楼', '6楼', '7楼', '8楼', '9楼', '10楼',
+                '顶层', '地下室', '车库', '大堂', '前台',
+                '茶水间', '会议室', '办公室', '洗手间', '卫生间', '食堂', '餐厅',
+                '停车场', '园区', '厂区', '宿舍', '公寓',
+                '北京分公司', '上海分公司', '广州分公司', '深圳分公司', '成都分公司',
+                '总部', '分部', '分公司', '办事处',
+                '大厅', '走廊', '过道', '电梯', '楼梯间', '后门', '正门',
+                '仓库', '机房', '档案室', '休息室',
+                '北京', '上海', '广州', '深圳', '成都', '杭州', '南京', '武汉', '西安'
+            ];
+            locationKeywords.forEach(kw => {
+                if (text.includes(kw) && !info.location.includes(kw)) info.location.push(kw);
+            });
+
+            /* --- 3. 提取数量 --- */
+            // 中文数字 + 量词
+            const cnNumPattern = /[一二三四五六七八九十百千万两零]+[块台件套个箱瓶盒张条次台组队间楼层项]+/g;
+            const cnMatches = text.match(cnNumPattern);
+            if (cnMatches) {
+                cnMatches.forEach(m => {
+                    if (m.length >= 2 && m.length <= 8 && !info.number.includes(m)) info.number.push(m);
+                });
+            }
+            // 阿拉伯数字 + 量词
+            const numPattern = /\d{1,5}[块台件套个箱瓶盒张条次台组队间楼层项]+/g;
+            const numMatches = text.match(numPattern);
+            if (numMatches) {
+                numMatches.forEach(m => {
+                    if (!info.number.includes(m)) info.number.push(m);
+                });
+            }
+            // 百分比/分数
+            const percentPattern = /\d{1,3}[%％]/g;
+            const percentMatches = text.match(percentPattern);
+            if (percentMatches) percentMatches.forEach(m => { if (!info.number.includes(m)) info.number.push(m); });
+
+            /* --- 4. 提取问题/现象 --- */
+            const problemKeywords = [
+                '异味', '气味', '臭味', '色差', '褪色', '污渍', '污迹', '脏污', '污垢',
+                '灰尘', '破损', '损坏', '老化', '磨损', '开裂', '漏水', '渗水',
+                '噪音', '噪声', '异响', '故障', '问题', '隐患', '事故', '投诉',
+                '不满意', '反馈', '抱怨', '建议', '需求', '缺失', '缺少',
+                '堵塞', '积水', '潮湿', '发霉', '霉变', '安全', '危险',
+                '清洁', '清理', '打扫', '清洗', '维修', '更换',
+                '落后', '不足', '紧张', '困难', '延误', '延期', '延后'
+            ];
+            problemKeywords.forEach(kw => {
+                if (text.includes(kw) && !info.problem.includes(kw)) info.problem.push(kw);
+            });
+
+            /* --- 5. 提取措施/动作 --- */
+            const actionKeywords = [
+                '更换', '更换为', '更换新的', '替换',
+                '清洗', '清洁', '清理', '打扫', '洗涤', '擦拭', '消毒',
+                '采购', '购买', '购置', '添置', '申请', '申领',
+                '布置', '安排', '部署', '规划', '摆放', '安装', '装配',
+                '维修', '修理', '检修', '保养', '维护', '检查', '巡检',
+                '调查', '调研', '研究', '评估', '分析', '统计',
+                '反馈', '回复', '报告', '汇报', '通报', '通知', '告示',
+                '协调', '沟通', '联络', '联系', '对接',
+                '培训', '学习', '宣传', '教育',
+                '取消', '暂停', '延期', '延后', '推迟', '停止',
+                '完成', '落实', '执行', '实施', '开展', '推进', '进行'
+            ];
+            actionKeywords.forEach(kw => {
+                if (text.includes(kw) && !info.action.includes(kw)) info.action.push(kw);
+            });
+
+            /* --- 6. 提取人员/部门 --- */
+            const deptKeywords = [
+                '综合管理部', '行政部', '人事部', '人力资源部', '财务部', '市场部',
+                '销售部', '技术部', '研发部', '产品部', '运营部',
+                '总经办', '董事会', '管理层', '领导',
+                '物业', '物业公司', '后勤', '后勤保障部',
+                'IT部', '信息部', '信息中心',
+                '保安部', '安保部', '安全部',
+                '管理层', '总经理办公室', '总裁办'
+            ];
+            deptKeywords.forEach(kw => {
+                if (text.includes(kw) && !info.people.includes(kw)) info.people.push(kw);
+            });
+
+            // 提取"XX部/XX经理/XX总/XX老师"等姓名格式
+            const namePatterns = [
+                /[\u4e00-\u9fa5]{2,3}(?:经理|总|主任|主管|老师|总监|助理)/g,
+                /综合管理部[\u4e00-\u9fa5]{1,3}/g
+            ];
+            namePatterns.forEach(pat => {
+                const matches = text.match(pat);
+                if (matches) matches.forEach(m => { if (!info.people.includes(m)) info.people.push(m); });
+            });
+
+            // 提取独立姓名（2-3字中文，位于特定上下文）
+            const contextNamePattern = /(?:反馈至|联系人|联系|由|请|至|给|对接)([\u4e00-\u9fa5]{2,3})(?:处|老师|经理|总|主任|进行|处理|反馈|对接)/g;
+            let match;
+            while ((match = contextNamePattern.exec(text)) !== null) {
+                if (!info.people.includes(match[1])) info.people.push(match[1]);
+            }
+
+            return info;
+        }
+
+        /* ========== 辅助函数 ========== */
+        function getCurrentDate() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+            const day = now.getDate();
+            return `${year}年${month}月${day}日`;
+        }
+
+        function pickFirst(arr, defaultVal) {
+            return arr && arr.length > 0 ? arr[0] : defaultVal;
+        }
+
+        function joinList(arr, sep, defaultVal) {
+            if (!arr || arr.length === 0) return defaultVal;
+            return arr.slice(0, 3).join(sep);
+        }
+
+        function deriveCoreMatter(info) {
+            const parts = [];
+            if (info.action.length > 0) parts.push(info.action[0]);
+            if (info.problem.length > 0) parts.push(info.problem[0]);
+            if (info.location.length > 0) parts.push(info.location[0]);
+            if (parts.length === 0) parts.push('办公环境优化');
+            return parts.slice(0, 2).join('相关');
+        }
+
+        function deriveActionObject(info) {
+            const parts = [];
+            if (info.problem.length > 0) parts.push(info.problem[0]);
+            if (info.action.length > 0) parts.push(info.action[0]);
+            if (parts.length === 0) parts.push('相关工作');
+            return parts.join('与');
+        }
+
+        /* ========== 更新智能提取预览 ========== */
+        function updateExtractPreview(info) {
+            const preview = document.getElementById('extractPreview');
+            const fieldOrder = [
+                { key: 'time', label: '时间' },
+                { key: 'location', label: '地点' },
+                { key: 'number', label: '数量' },
+                { key: 'problem', label: '问题' },
+                { key: 'action', label: '动作' },
+                { key: 'people', label: '人员' }
+            ];
+
+            let html = '<div class="preview-title">智能提取预览</div><div class="field-row">';
+            let hasContent = false;
+
+            fieldOrder.forEach(f => {
+                if (info[f.key] && info[f.key].length > 0) {
+                    hasContent = true;
+                    const value = info[f.key].slice(0, 2).join('、');
+                    html += `<span class="field-tag"><span class="label">${f.label}:</span><span class="value">${value}</span></span>`;
+                }
+            });
+
+            if (!hasContent) {
+                html += '<span class="empty-hint">未识别到明确的关键信息，请补充更详细的素材内容</span>';
+            }
+
+            html += '</div>';
+            preview.innerHTML = html;
+        }
+
+        /* ========== 场景1: 行政通知 ========== */
+        function generateNotice(text, info, tone) {
+            const words = toneWords[tone];
+            const coreMatter = deriveCoreMatter(info);
+            const timeStr = pickFirst(info.time, '本月底前');
+            const locStr = joinList(info.location, '、', '相关区域');
+            const numStr = pickFirst(info.number, '若干');
+            const peopleStr = pickFirst(info.people, '综合管理部');
+            const contactName = info.people.find(p => p.length <= 3 && !p.includes('部')) || '杨一帆';
+
+            const title = `关于${coreMatter}的通知`;
+
+            // 背景段
+            let bgSentence;
+            if (tone === 'formal') {
+                bgSentence = `根据近期员工反馈及${peopleStr}的检查情况，按照办公环境优化的相关要求，现就有关事项通知如下：`;
+            } else if (tone === 'friendly') {
+                bgSentence = `为了更好地改善办公环境，结合大家近期反馈的${info.problem[0] || '相关情况'}，现做出如下安排：`;
+            } else {
+                bgSentence = `现将${coreMatter}事项通知如下：`;
+            }
+
+            // 事项段（分点）
+            const itemPoints = [];
+            if (info.action.length > 0 || info.location.length > 0) {
+                itemPoints.push(`更换/处理范围：${locStr}等区域，共${numStr}`);
+            }
+            if (info.problem.length > 0) {
+                itemPoints.push(`重点解决：${joinList(info.problem, '、', '相关问题')}现象`);
+            }
+            if (info.action.length > 1) {
+                itemPoints.push(`配套措施：${info.action.slice(1).join('、')}工作同步推进`);
+            }
+            if (itemPoints.length === 0) {
+                itemPoints.push(`工作范围：${locStr}区域`);
+                itemPoints.push(`工作内容：${coreMatter}`);
+                itemPoints.push(`工作标准：达到日常办公使用要求`);
+            }
+
+            // 执行段
+            let execSentence;
+            if (tone === 'formal') {
+                execSentence = `请于${timeStr}前完成，反馈至${peopleStr}${contactName}处。`;
+            } else if (tone === 'friendly') {
+                execSentence = `预计${timeStr}前完成，如有问题可联系${contactName}，感谢大家的理解与配合。`;
+            } else {
+                execSentence = `${timeStr}前完成，反馈至${contactName}。`;
+            }
+
+            // 组装（用 HTML 渲染标题样式）
+            let bodyTitle = `<div class="notice-title">${title}</div>`;
+            let body = bodyTitle;
+            body += `各部门、各位同事：\n\n`;
+            body += `　　${bgSentence}\n\n`;
+
+            const prefixList = words.prefix;
+            itemPoints.forEach((pt, i) => {
+                const p = prefixList[i] || `${i + 1}.`;
+                body += `　　${p} ${pt}\n\n`;
+            });
+
+            body += `　　${execSentence}\n\n`;
+            body += `特此通知。\n\n`;
+            body += `${peopleStr || '综合管理部'}\n`;
+            body += getCurrentDate();
+
+            return body;
+        }
+
+        /* ========== 场景2: 邮件汇报 ========== */
+        function generateEmail(text, info, tone) {
+            const coreMatter = deriveCoreMatter(info);
+            const timeStr = pickFirst(info.time, '本周内');
+            const locStr = joinList(info.location, '、', '相关区域');
+            const numStr = pickFirst(info.number, '若干');
+            const peopleStr = pickFirst(info.people, '综合管理部');
+
+            const subject = `${coreMatter}工作进展汇报`;
+
+            // 背景
+            let bg = `为解决${joinList(info.problem, '、', '当前办公环境存在的')}等问题，${peopleStr}于近期启动了${coreMatter}专项工作。`;
+            if (tone === 'concise') bg = `就${coreMatter}工作，现将情况汇报如下：`;
+
+            // 已完成事项
+            const progress = [];
+            if (info.action.length > 0) {
+                progress.push(`已完成第一批${info.action[0]}工作，涉及${locStr}等区域，共${numStr}`);
+            } else {
+                progress.push(`已完成${coreMatter}的方案制定与前期准备`);
+            }
+            if (info.number.length > 1) {
+                progress.push(`累计投入${info.number.slice(0, 2).join('、')}，覆盖核心办公区域`);
+            } else {
+                progress.push(`相关配套准备工作已同步完成`);
+            }
+
+            // 问题/需协调
+            const problems = [];
+            if (info.problem.length > 0) {
+                const p = info.problem[0];
+                problems.push(`因${p}相关因素影响，部分工作需根据实际情况调整节奏`);
+            }
+            if (info.time.length > 1) {
+                problems.push(`受${info.time[0]}及${info.time[1]}时间窗口重叠影响，全楼${info.action[0] || '处理'}工作需延后至${info.time[1] || '下月'}`);
+            } else {
+                problems.push(`后续工作需各部门配合协调推进`);
+            }
+
+            // 下一步计划
+            const plans = [];
+            plans.push(`${timeStr}前：完成${locStr}区域的核心工作`);
+            plans.push(`下月上旬：完成全楼覆盖，组织验收并汇总反馈`);
+
+            let ending;
+            if (tone === 'formal') ending = '妥否，请批示。';
+            else if (tone === 'friendly') ending = '以上，请审阅。如有调整意见，请随时告知。';
+            else ending = '以上，请审阅。';
+
+            let body = '';
+            if (tone !== 'concise') body = `<div class="email-subject">主题：${subject}</div><div class="email-header">收件人：各相关部门负责人</div>\n\n`;
+            else body = `<div class="email-subject">主题：${subject}</div>\n\n`;
+
+            body += `各位领导、同事：\n\n`;
+            body += `　　${bg}\n\n`;
+            body += `一、工作进展\n`;
+            progress.forEach(p => { body += `　　• ${p}\n`; });
+            body += `\n二、存在问题及需协调事项\n`;
+            problems.forEach(p => { body += `　　• ${p}\n`; });
+            body += `\n三、下一步计划\n`;
+            plans.forEach(p => { body += `　　• ${p}\n`; });
+            body += `\n　　${ending}\n\n`;
+            body += `${peopleStr}\n`;
+            body += getCurrentDate();
+
+            return body;
+        }
+
+        /* ========== 场景3: 微信群发 ========== */
+        function generateWechat(text, info, tone) {
+            // 选 emoji
+            let emoji = '📢';
+            const hasProblem = info.problem.length > 0;
+            const hasAction = info.action.length > 0;
+            if (hasProblem) emoji = '⚠️';
+            if (hasAction && !hasProblem) emoji = '✅';
+            if (info.action.includes('提示') || info.action.includes('提醒')) emoji = '💡';
+
+            // 组装短句（每行 <=15 字）
+            const lines = [];
+            const coreMatter = deriveCoreMatter(info);
+
+            lines.push(`${emoji} ${coreMatter}提醒`);
+            lines.push('');
+
+            if (info.location.length > 0) {
+                const loc = info.location.slice(0, 2).join('、');
+                lines.push(`地点：${loc}`);
+            }
+            if (info.time.length > 0) {
+                lines.push(`**${info.time[0]}** 前完成`);
+            }
+            if (info.number.length > 0) {
+                lines.push(`数量：**${info.number[0]}**`);
+            }
+            if (info.problem.length > 0) {
+                const p = info.problem.slice(0, 2).join('、');
+                lines.push(`重点关注：${p}`);
+            }
+            if (info.action.length > 0) {
+                lines.push(`动作：${info.action.slice(0, 2).join('、')}`);
+            }
+            if (info.people.length > 0) {
+                const contact = info.people[info.people.length - 1];
+                lines.push(`联系人：**${contact}**`);
+            }
+
+            lines.push('');
+            if (tone === 'friendly') lines.push('感谢大家配合 👏');
+            lines.push('有问题随时联系~');
+
+            return lines.join('\n');
+        }
+
+        /* ========== 场景4: 领导简报 ========== */
+        function generateBriefing(text, info, tone) {
+            const coreMatter = deriveCoreMatter(info);
+            const locStr = joinList(info.location, '、', '相关区域');
+            const numStr = pickFirst(info.number, '若干');
+            const timeStr = pickFirst(info.time, '近期');
+            const peopleStr = pickFirst(info.people, '综合管理部');
+
+            // 核心结论
+            const conclusion = `关于${coreMatter}工作：已完成${locStr}区域的重点推进，整体进度可控。`;
+
+            // 关键数据 (3个以内，数据+结论)
+            const dataPoints = [];
+            if (info.number.length > 0) {
+                dataPoints.push(`${info.number[0]}：覆盖${locStr}高频通行区域`);
+            } else {
+                dataPoints.push(`覆盖${locStr}区域：覆盖核心办公区`);
+            }
+            if (info.action.length > 0) {
+                dataPoints.push(`已${info.action[0]}：推动专项工作落地`);
+            }
+            if (info.problem.length > 0) {
+                dataPoints.push(`${info.problem[0]}专项：纳入重点跟踪事项`);
+            }
+
+            // 具体举措
+            const measures = [];
+            if (info.action.length > 0) {
+                measures.push(`启动${info.action[0]}专项，已完成${locStr}区域的现场评估`);
+            } else {
+                measures.push(`完成现场评估与方案制定`);
+            }
+            if (info.location.length > 0) {
+                measures.push(`落实${locStr}等区域的具体责任人`);
+            } else {
+                measures.push(`明确各区域责任人员`);
+            }
+            if (info.problem.length > 0) {
+                measures.push(`针对${info.problem.slice(0, 2).join('、')}问题，制定专项处理方案`);
+            } else {
+                measures.push(`建立问题反馈与跟踪机制`);
+            }
+
+            // 需协调事项
+            const coordinations = [];
+            if (info.problem.length > 0) {
+                coordinations.push({ level: '🔴', label: '高', text: `${info.problem[0]}问题需跨部门协调，建议${timeStr}前达成共识` });
+            } else {
+                coordinations.push({ level: '🔴', label: '高', text: `${coreMatter}需各部门负责人确认，建议${timeStr}前反馈` });
+            }
+            if (info.time.length > 0) {
+                coordinations.push({ level: '🟡', label: '中', text: `时间窗口紧张，需在${info.time[0]}前完成前期准备` });
+            } else {
+                coordinations.push({ level: '🟡', label: '中', text: `时间节点需确认，建议本周内明确` });
+            }
+            coordinations.push({ level: '🟢', label: '低', text: `后续日常${info.action[0] || '维护'}工作建议纳入常态化管理` });
+
+            // 下一步建议
+            const nextSteps = [];
+            nextSteps.push(`${peopleStr}在${timeStr}前完成${locStr}区域的${info.action[0] || '执行'}工作`);
+            nextSteps.push(`各部门在${timeStr}前完成内部意见反馈`);
+
+            // HTML 渲染
+            let body = `<div class="briefing-conclusion">【核心结论】${conclusion}</div>\n\n`;
+            body += `【关键数据】\n`;
+            dataPoints.forEach(d => {
+                body += `<div class="data-row">• ${d}</div>`;
+            });
+            body += `\n【具体举措】\n`;
+            measures.forEach(m => { body += `• ${m}\n`; });
+            body += `\n【需协调事项】\n`;
+            coordinations.forEach(c => {
+                const priorityClass = c.label === '高' ? 'priority-high' : c.label === '中' ? 'priority-mid' : 'priority-low';
+                body += `<span class="${priorityClass}">${c.level} ${c.label}优</span>：${c.text}\n`;
+            });
+            body += `\n【下一步建议】\n`;
+            nextSteps.forEach(n => { body += `• ${n}\n`; });
+
+            return body;
+        }
+
+        /* ========== 主生成函数 ========== */
         function generateText() {
             const inputText = document.getElementById('inputText').value.trim();
             const scene = document.getElementById('scene').value;
             const tone = document.getElementById('tone').value;
 
             if (!inputText) {
-                alert('请输入原始素材');
+                alert('请先粘贴原始素材');
+                document.getElementById('outputContent').innerHTML = '<span class="output-placeholder">生成的文案将在此显示...</span>';
+                document.getElementById('extractPreview').innerHTML =
+                    '<div class="preview-title">智能提取预览</div><div class="empty-hint">点击生成文案后，这里将显示AI提取的关键信息</div>';
                 return;
             }
 
-            const keywords = extractKeywords(inputText);
-            let output = '';
+            // 智能提取
+            const info = extractKeyInfo(inputText);
 
+            // 更新预览
+            updateExtractPreview(info);
+
+            // 按场景生成
+            let output = '';
             switch (scene) {
                 case 'notice':
-                    output = generateNotice(inputText, keywords, tone);
+                    output = generateNotice(inputText, info, tone);
                     break;
                 case 'email':
-                    output = generateEmail(inputText, keywords, tone);
+                    output = generateEmail(inputText, info, tone);
                     break;
                 case 'wechat':
-                    output = generateWechat(inputText, keywords, tone);
+                    output = generateWechat(inputText, info, tone);
                     break;
                 case 'briefing':
-                    output = generateBriefing(inputText, keywords, tone);
+                    output = generateBriefing(inputText, info, tone);
                     break;
             }
 
@@ -384,132 +975,7 @@
             document.getElementById('copyBtn').textContent = '一键复制';
         }
 
-        function extractKeywords(text) {
-            const cleaned = text.replace(/[\s\n\r]+/g, '').slice(0, 20);
-            return cleaned || '事项';
-        }
-
-        function generateNotice(text, keywords, tone) {
-            const words = toneWords[tone];
-            const title = `【通知】关于${keywords}的安排`;
-            
-            const paragraphs = text.split(/[。！？\n]+/).filter(p => p.trim());
-            const mainContent = paragraphs.map((p, i) => `　　${i + 1}. ${p.trim()}。`).join('\n');
-
-            const opener = getRandomItem(words.openers);
-            const closer = getRandomItem(words.closers);
-
-            return `${title}
-
-${opener}，现将有关事项通知如下：
-
-${mainContent}
-
-${closer}。如有疑问，请联系综合管理部。
-
-综合管理部
-${getCurrentDate()}`;
-        }
-
-        function generateEmail(text, keywords, tone) {
-            const words = toneWords[tone];
-            const paragraphs = text.split(/[。！？\n]+/).filter(p => p.trim());
-            
-            const greeting = tone === 'formal' ? '各位领导、同事：' : '各位同事：';
-            const subject = `【工作汇报】${keywords}`;
-
-            let mainContent = '';
-            if (paragraphs.length > 0) {
-                mainContent = paragraphs.map(p => `　　${p.trim()}。`).join('\n');
-            }
-
-            const opener = getRandomItem(words.openers);
-            const closer = getRandomItem(words.closers);
-
-            return `主题：${subject}
-
-${greeting}
-
-　　${opener}，现将${keywords}相关情况汇报如下：
-
-${mainContent}
-
-　　${closer}，望各位领导和同事给予支持与指导。
-
-此致
-
-祝工作顺利！
-
-综合管理部
-${getCurrentDate()}`;
-        }
-
-        function generateWechat(text, keywords, tone) {
-            const words = toneWords[tone];
-            const paragraphs = text.split(/[。！？\n]+/).filter(p => p.trim());
-            
-            let emoji = '📢';
-            if (keywords.includes('满意') || keywords.includes('调研')) emoji = '📊';
-            if (keywords.includes('问题')) emoji = '⚠️';
-            if (keywords.includes('会议')) emoji = '📅';
-            if (keywords.includes('通知')) emoji = '📌';
-            
-            const lines = paragraphs.map((p, i) => {
-                const prefix = tone === 'concise' ? '✅' : '💡';
-                return `${prefix} ${p.trim()}`;
-            });
-
-            const opener = tone === 'friendly' ? '各位小伙伴～' : '各位同事：';
-
-            return `${emoji} ${keywords}
-
-${opener}
-
-${lines.join('\n')}
-
-${tone === 'friendly' ? '� 感谢配合！' : ''}`;
-        }
-
-        function generateBriefing(text, keywords, tone) {
-            const words = toneWords[tone];
-            const paragraphs = text.split(/[。！？\n]+/).filter(p => p.trim());
-            
-            const coreConclusion = paragraphs[0] ? truncateText(paragraphs[0].trim(), 3) : `关于${keywords}的情况说明`;
-            const measures = paragraphs.slice(1, 4).map(p => truncateText(p.trim(), 1));
-            const coordinations = paragraphs.length > 4 
-                ? paragraphs.slice(4).map(p => truncateText(p.trim(), 1)).join('\n')
-                : '• 暂无需协调事项';
-
-            const connector = getRandomItem(words.connectors);
-
-            return `【核心结论】
-${coreConclusion}
-
-【具体举措】
-${measures.join('\n')}
-
-【需协调事项】
-${coordinations}`;
-        }
-
-        function truncateText(text, maxLines) {
-            if (text.length <= 40) return `• ${text}`;
-            const truncated = text.slice(0, 40) + '...';
-            return `• ${truncated}`;
-        }
-
-        function getRandomItem(arr) {
-            return arr[Math.floor(Math.random() * arr.length)];
-        }
-
-        function getCurrentDate() {
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            return `${year}年${month}月${day}日`;
-        }
-
+        /* ========== 复制功能 ========== */
         function copyText() {
             const outputContent = document.getElementById('outputContent');
             const text = outputContent.innerText;
@@ -519,25 +985,41 @@ ${coordinations}`;
                 return;
             }
 
-            navigator.clipboard.writeText(text).then(() => {
+            // 兼容处理：优先使用 navigator.clipboard，失败则回退
+            const fallbackCopy = (t) => {
+                const ta = document.createElement('textarea');
+                ta.value = t;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                try {
+                    document.execCommand('copy');
+                    showCopySuccess();
+                } catch (e) {
+                    alert('复制失败，请手动选择文本复制');
+                }
+                document.body.removeChild(ta);
+            };
+
+            const showCopySuccess = () => {
                 const toast = document.getElementById('toast');
                 const btn = document.getElementById('copyBtn');
-                
                 toast.classList.add('show');
                 btn.classList.add('copied');
                 btn.textContent = '已复制';
-
-                setTimeout(() => {
-                    toast.classList.remove('show');
-                }, 2000);
-
+                setTimeout(() => { toast.classList.remove('show'); }, 2000);
                 setTimeout(() => {
                     btn.classList.remove('copied');
                     btn.textContent = '一键复制';
                 }, 3000);
-            }).catch(() => {
-                alert('复制失败，请手动选择文本复制');
-            });
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(showCopySuccess).catch(() => fallbackCopy(text));
+            } else {
+                fallbackCopy(text);
+            }
         }
     </script>
 </body>
